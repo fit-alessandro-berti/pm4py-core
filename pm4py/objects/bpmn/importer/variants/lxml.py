@@ -35,7 +35,28 @@ def parse_element(bpmn_graph, counts, curr_el, parents, incoming_dict, outgoing_
     """
     layout = bpmn_graph.get_layout()
     tag = curr_el.tag.lower()
-    if tag.endswith("subprocess"): # subprocess invocation
+
+    if tag.endswith("collaboration"):
+        collaboration_id = curr_el.get("id")
+        collaboration = BPMN.Collaboration(id=collaboration_id, process=collaboration_id)
+        bpmn_graph.add_node(collaboration)
+        nodes_dict[collaboration_id] = collaboration
+    elif tag.endswith("participant"):
+        participant_id = curr_el.get("id")
+        name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
+        process_ref = curr_el.get("processRef")
+        participant = BPMN.Participant(id=participant_id, name=name, process=None, process_ref=process_ref)
+        bpmn_graph.add_node(participant)
+        nodes_dict[participant_id] = participant
+    elif tag.endswith("textannotation"):
+        annotation_id = curr_el.get("id")
+        text = ""
+        for child in curr_el:
+            text = child.text
+        annotation = BPMN.TextAnnotation(id=annotation_id, text=text, process=process)
+        bpmn_graph.add_node(annotation)
+        nodes_dict[annotation_id] = annotation
+    elif tag.endswith("subprocess"): # subprocess invocation
         name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
         subprocess = BPMN.SubProcess(id=curr_el.get("id"), name=name, process=process, depth=rec_depth)
         bpmn_graph.add_node(subprocess)
@@ -54,7 +75,12 @@ def parse_element(bpmn_graph, counts, curr_el, parents, incoming_dict, outgoing_
         name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
         #this_type = str(curr_el.tag)
         #this_type = this_type[this_type.index("}") + 1:]
-        task = BPMN.Task(id=id, name=name, process=process)
+        if tag.endswith("usertask"):
+            task = BPMN.UserTask(id=id, name=name, process=process)
+        elif tag.endswith("sendtask"):
+            task = BPMN.SendTask(id=id, name=name, process=process)
+        else:
+            task = BPMN.Task(id=id, name=name, process=process)
         bpmn_graph.add_node(task)
         node = task
         nodes_dict[id] = node
@@ -184,22 +210,35 @@ def parse_element(bpmn_graph, counts, curr_el, parents, incoming_dict, outgoing_
         bpmn_graph.add_node(inclusive_gateway)
         node = inclusive_gateway
         nodes_dict[id] = node
+    elif tag.endswith("eventbasedgateway"):
+        id = curr_el.get("id")
+        name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
+        try:
+            direction = BPMN.Gateway.Direction[curr_el.get("gatewayDirection").upper()]
+            event_based_gateway = BPMN.EventBasedGateway(id=curr_el.get("id"), name=name, gateway_direction=direction, process=process)
+        except:
+            event_based_gateway = BPMN.EventBasedGateway(id=curr_el.get("id"), name=name, gateway_direction=BPMN.Gateway.Direction.UNSPECIFIED, process=process)
+        bpmn_graph.add_node(event_based_gateway)
+        node = event_based_gateway
+        nodes_dict[id] = node
     elif tag.endswith("incoming"): # incoming flow of a node
         name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
         if node is not None:
-            incoming_dict[curr_el.text.strip()] = (node, process, tag, name)
+            if curr_el.text.strip() not in incoming_dict:
+                incoming_dict[curr_el.text.strip()] = (node, process, tag, name, parents)
     elif tag.endswith("outgoing"): # outgoing flow of a node
         name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
         if node is not None:
-            outgoing_dict[curr_el.text.strip()] = (node, process, tag, name)
-    elif tag.endswith("sequenceflow"): # normal sequence flow between two nodes
+            if curr_el.text.strip() not in outgoing_dict:
+                outgoing_dict[curr_el.text.strip()] = (node, process, tag, name, parents)
+    elif tag.endswith("sequenceflow") or tag.endswith("messageflow") or tag.endswith("association"):
         seq_flow_id = curr_el.get("id")
         source_ref = curr_el.get("sourceRef")
         target_ref = curr_el.get("targetRef")
         name = curr_el.get("name").replace("\r", "").replace("\n", "") if "name" in curr_el.attrib else ""
         if source_ref is not None and target_ref is not None:
-            incoming_dict[seq_flow_id] = (target_ref, process, tag, name)
-            outgoing_dict[seq_flow_id] = (source_ref, process, tag, name)
+            incoming_dict[seq_flow_id] = (target_ref, process, tag, name, parents)
+            outgoing_dict[seq_flow_id] = (source_ref, process, tag, name, parents)
     elif tag.endswith("waypoint"): # contains information of x, y values of an edge
         if flow is not None:
             x = float(curr_el.get("x"))
@@ -227,24 +266,39 @@ def parse_element(bpmn_graph, counts, curr_el, parents, incoming_dict, outgoing_
         # bpmn_graph.set_process_id(process)
         for seq_flow_id in incoming_dict:
             if incoming_dict[seq_flow_id][0] in nodes_dict:
-                incoming_dict[seq_flow_id] = (nodes_dict[incoming_dict[seq_flow_id][0]], incoming_dict[seq_flow_id][1], incoming_dict[seq_flow_id][2], incoming_dict[seq_flow_id][3])
+                incoming_dict[seq_flow_id] = (nodes_dict[incoming_dict[seq_flow_id][0]], incoming_dict[seq_flow_id][1], incoming_dict[seq_flow_id][2], incoming_dict[seq_flow_id][3], incoming_dict[seq_flow_id][4])
         for seq_flow_id in outgoing_dict:
             if outgoing_dict[seq_flow_id][0] in nodes_dict:
-                outgoing_dict[seq_flow_id] = (nodes_dict[outgoing_dict[seq_flow_id][0]], outgoing_dict[seq_flow_id][1], outgoing_dict[seq_flow_id][2], outgoing_dict[seq_flow_id][3])
+                outgoing_dict[seq_flow_id] = (nodes_dict[outgoing_dict[seq_flow_id][0]], outgoing_dict[seq_flow_id][1], outgoing_dict[seq_flow_id][2], outgoing_dict[seq_flow_id][3], outgoing_dict[seq_flow_id][4])
 
         # also supports flows without waypoints
         flows_without_waypoints = set(flow_info).union(set(outgoing_dict).intersection(set(incoming_dict)))
         for flow_id in flows_without_waypoints:
             flow_info[flow_id] = []
-
+        
         for flow_id in flow_info:
             if flow_id in outgoing_dict and flow_id in incoming_dict:
-                if isinstance(outgoing_dict[flow_id][0], BPMN.BPMNNode) and isinstance(incoming_dict[flow_id][0], BPMN.BPMNNode):
+                flow = None
+                flow_type = outgoing_dict[flow_id][2]
+
+                if flow_type.endswith("messageflow"):
+                    collaboration_id = None
+                    for par in outgoing_dict[flow_id][4]:
+                        par_tag = str(par.tag).lower()
+                        if par_tag.endswith("collaboration"):
+                            collaboration_id = par.get("id")
+                    flow = BPMN.MessageFlow(outgoing_dict[flow_id][0], incoming_dict[flow_id][0], id=flow_id, name=outgoing_dict[flow_id][3], process=collaboration_id)
+                elif flow_type.endswith("association"):
+                    flow = BPMN.Association(outgoing_dict[flow_id][0], incoming_dict[flow_id][0], id=flow_id, name=outgoing_dict[flow_id][3], process=outgoing_dict[flow_id][1])
+                else:
                     flow = BPMN.SequenceFlow(outgoing_dict[flow_id][0], incoming_dict[flow_id][0], id=flow_id, name=outgoing_dict[flow_id][3], process=outgoing_dict[flow_id][1])
+
+                if flow is not None:
                     bpmn_graph.add_flow(flow)
                     layout.get(flow).del_waypoints()
                     for waypoint in flow_info[flow_id]:
                         layout.get(flow).add_waypoint(waypoint)
+
         for node_id in nodes_bounds:
             if node_id in nodes_dict:
                 bounds = nodes_bounds[node_id]

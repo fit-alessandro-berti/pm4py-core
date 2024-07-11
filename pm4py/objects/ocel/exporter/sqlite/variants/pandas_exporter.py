@@ -18,6 +18,7 @@
 from pm4py.objects.ocel.obj import OCEL
 from typing import Dict, Any, Optional
 from pm4py.objects.ocel.util import ocel_consistency
+from pm4py.objects.ocel.util import filtering_utils
 import os
 
 
@@ -43,6 +44,7 @@ def apply(ocel: OCEL, target_path: str, parameters: Optional[Dict[Any, Any]] = N
         os.remove(target_path)
 
     ocel = ocel_consistency.apply(ocel, parameters=parameters)
+    ocel = filtering_utils.propagate_relations_filtering(ocel, parameters=parameters)
 
     conn = sqlite3.connect(target_path)
 

@@ -18,6 +18,7 @@ __doc__ = """
 The ``pm4py.stats`` module contains the statistics offered in ``pm4py``
 """
 
+import sys
 from typing import Dict, Union, List, Tuple, Collection, Iterator
 from typing import Set, Optional
 from typing import Counter as TCounter
@@ -209,7 +210,7 @@ def get_trace_attribute_values(log: Union[EventLog, pd.DataFrame], attribute: st
         return ret
 
 
-def get_variants(log: Union[EventLog, pd.DataFrame], activity_key: str = "concept:name", timestamp_key: str = "time:timestamp", case_id_key: str = "case:concept:name") -> Union[Dict[Tuple[str], List[Trace]], Dict[Tuple[str], int]]:
+def get_variants(log: Union[EventLog, pd.DataFrame], activity_key: str = "concept:name", timestamp_key: str = "time:timestamp", case_id_key: str = "case:concept:name", max_repetitions: int = sys.maxsize) -> Union[Dict[Tuple[str], List[Trace]], Dict[Tuple[str], int]]:
     """
     Gets the variants from the log
 
@@ -217,6 +218,8 @@ def get_variants(log: Union[EventLog, pd.DataFrame], activity_key: str = "concep
     :param activity_key: attribute to be used for the activity
     :param timestamp_key: attribute to be used for the timestamp
     :param case_id_key: attribute to be used as case identifier
+    :param max_repetitions: maximum number of consecutive repetitions for an activity.
+    For example, {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'B', 'C'): 2, ('A', 'B', 'B', 'B', 'B', 'B', 'C'): 1} would be reduced to: {('A', 'B', 'C'): 6} if max_repetitions=1; {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'C'): 3} if max_repetitions=2; {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'B', 'C'): 3} if max_repetitions=3; {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'B', 'C'): 2, ('A', 'B', 'B', 'B', 'B', 'C'): 1} if max_repetitions=4;
     :rtype: ``Dict[Tuple[str], List[Trace]]``
 
     .. code-block:: python3
@@ -225,10 +228,10 @@ def get_variants(log: Union[EventLog, pd.DataFrame], activity_key: str = "concep
 
         variants = pm4py.get_variants(dataframe, activity_key='concept:name', case_id_key='case:concept:name', timestamp_key='time:timestamp')
     """
-    return get_variants_as_tuples(log, activity_key=activity_key, timestamp_key=timestamp_key, case_id_key=case_id_key)
+    return get_variants_as_tuples(log, activity_key=activity_key, timestamp_key=timestamp_key, case_id_key=case_id_key, max_repetitions=max_repetitions)
 
 
-def get_variants_as_tuples(log: Union[EventLog, pd.DataFrame], activity_key: str = "concept:name", timestamp_key: str = "time:timestamp", case_id_key: str = "case:concept:name") -> Union[Dict[Tuple[str], List[Trace]], Dict[Tuple[str], int]]:
+def get_variants_as_tuples(log: Union[EventLog, pd.DataFrame], activity_key: str = "concept:name", timestamp_key: str = "time:timestamp", case_id_key: str = "case:concept:name", max_repetitions: int = sys.maxsize) -> Union[Dict[Tuple[str], List[Trace]], Dict[Tuple[str], int]]:
     """
     Gets the variants from the log (where the keys are tuples and not strings)
 
@@ -236,6 +239,8 @@ def get_variants_as_tuples(log: Union[EventLog, pd.DataFrame], activity_key: str
     :param activity_key: attribute to be used for the activity
     :param timestamp_key: attribute to be used for the timestamp
     :param case_id_key: attribute to be used as case identifier
+    :param max_repetitions: maximum number of consecutive repetitions for an activity.
+    For example, {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'B', 'C'): 2, ('A', 'B', 'B', 'B', 'B', 'B', 'C'): 1} would be reduced to: {('A', 'B', 'C'): 6} if max_repetitions=1; {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'C'): 3} if max_repetitions=2; {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'B', 'C'): 3} if max_repetitions=3; {('A', 'B', 'C'): 3, ('A', 'B', 'B', 'B', 'C'): 2, ('A', 'B', 'B', 'B', 'B', 'C'): 1} if max_repetitions=4;
     :rtype: ``Dict[Tuple[str], List[Trace]]``
 
     .. code-block:: python3
@@ -251,10 +256,16 @@ def get_variants_as_tuples(log: Union[EventLog, pd.DataFrame], activity_key: str
     if check_is_pandas_dataframe(log):
         check_pandas_dataframe_columns(log, activity_key=activity_key, timestamp_key=timestamp_key, case_id_key=case_id_key)
         from pm4py.statistics.variants.pandas import get
-        return get.get_variants_count(log, parameters=properties)
+        variants = get.get_variants_count(log, parameters=properties)
     else:
         from pm4py.statistics.variants.log import get
-        return get.get_variants(log, parameters=properties)
+        variants = get.get_variants(log, parameters=properties)
+
+    if max_repetitions < sys.maxsize:
+        from pm4py.util import variants_util
+        variants = variants_util.aggregate_consecutive_activities_in_variants(variants, max_repetitions=max_repetitions)
+
+    return variants
 
 
 def split_by_process_variant(log: Union[EventLog, pd.DataFrame], activity_key: str = "concept:name",
