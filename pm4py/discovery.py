@@ -17,7 +17,7 @@ along with this program.  If not, see this software project's root or
 visit <https://www.gnu.org/licenses/>.
 
 Website: https://processintelligence.solutions
-Contact: info@processintelligence.solutions
+Contact: contact@processintelligence.solutions
 '''
 __doc__ = """
 The ``pm4py.discovery`` module contains the process discovery algorithms implemented in ``pm4py``.

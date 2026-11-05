@@ -10,10 +10,10 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "AGPL-3.0-or-later"
 authors = [
-    { name = "Process Intelligence Solutions (PIS)", email = "info@processintelligence.solutions" },
+    { name = "Process Intelligence Solutions (PIS)", email = "contact@processintelligence.solutions" },
 ]
 maintainers = [
-    { name = "Process Intelligence Solutions (PIS)", email = "info@processintelligence.solutions" },
+    { name = "Process Intelligence Solutions (PIS)", email = "contact@processintelligence.solutions" },
 ]
 keywords = ["process mining"]
 classifiers = [
